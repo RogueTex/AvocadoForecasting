@@ -22,10 +22,11 @@
 # Generated outputs (from export_figures_tables.R or Rmd)
 figures/
 tables/
+!docs/figures/
 
 # OS
 .DS_Store
 Thumbs.db
 
-# Data (download from Kaggle; uncomment if excluding)
-# avocado.csv
+# Data (download from Kaggle or generate via scripts/fetch_or_generate_data.R)
+avocado.csv

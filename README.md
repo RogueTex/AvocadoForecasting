@@ -11,6 +11,12 @@ Time series analysis of U.S. Hass avocado prices and demand volumes using ARIMA,
 
 No missing values. Weekly frequency throughout.
 
+![Price and volume over time (TotalUS)](docs/figures/readme_price_timeseries.png)
+
+![Volume by type](docs/figures/readme_volume_timeseries.png)
+
+![Price vs volume (TotalUS conventional)](docs/figures/readme_price_volume.png)
+
 ## Modelling Strategy
 
 ### Framework
@@ -54,6 +60,10 @@ R 4.5, `fable`, `tsibble`, `feasts`, `brms`, `tidyverse`.
 
 ARIMA(1,1,0) improves MAPE by about 21% over Naive. SES and Naive are effectively the same (flat forecast). Bayesian AR(1) underperforms due to cumulative reconstruction error when integrating differenced log-predictions back to levels.
 
+![ARIMA(1,1,0) price forecast vs actual (12-week test)](docs/figures/readme_price_forecast.png)
+
+![Model comparison: price MAPE](docs/figures/readme_model_comparison.png)
+
 ### Volume and PLU Forecasting
 
 | Series      | Model         | RMSE   | MAPE  |
@@ -64,9 +74,13 @@ ARIMA(1,1,0) improves MAPE by about 21% over Naive. SES and Naive are effectivel
 | PLU 4225      | ARIMA(0,1,1) | 1.25M | 8.7%  |
 | PLU 4770      | ARIMA(0,1,1) | 126K  | 13.9% |
 
+![PLU-level forecast MAPE (ARIMA 0,1,1)](docs/figures/readme_plu_accuracy.png)
+
 ### Diagnostics
 
 Ljung-Box on ARIMA(1,1,0) residuals: p ≈ 0.86. Residuals consistent with white noise; no remaining autocorrelation.
+
+![Residuals vs fitted](docs/figures/readme_residuals.png)
 
 ### Findings
 
@@ -85,7 +99,9 @@ Ljung-Box on ARIMA(1,1,0) residuals: p ≈ 0.86. Residuals consistent with white
 
 ```r
 install.packages(c("fable", "tsibble", "feasts", "fabletools", "tidyverse", "brms", "gt"))
+# If avocado.csv is missing, run: source("scripts/fetch_or_generate_data.R")
 rmarkdown::render("avocado_forecasting_analysis.Rmd")
+# Regenerate README figures: Rscript scripts/run_analysis_and_figures.R
 ```
 
 Data: [Kaggle Avocado Prices](https://www.kaggle.com/datasets/neuromusic/avocado-prices)
@@ -94,10 +110,14 @@ Data: [Kaggle Avocado Prices](https://www.kaggle.com/datasets/neuromusic/avocado
 
 ```
 Avocado Project/
-├── avocado.csv                      # Raw data (from Kaggle)
-├── avocado_forecasting_analysis.Rmd # Main analysis (recommended)
+├── avocado.csv                       # Raw data (from Kaggle)
+├── avocado_forecasting_analysis.Rmd   # Main analysis (recommended)
 ├── avocado_plu_forecasting.Rmd       # PLU-only ARIMA workflow
-├── Avocado_Project/
-│   ├── avocado_forecasting_paper.tex
-│   └── figures/                     # Exported plots (generated)
+├── scripts/
+│   ├── fetch_or_generate_data.R       # Data setup
+│   └── run_analysis_and_figures.R    # Regenerate README figures
+├── docs/figures/                     # README figures (generated)
+└── Avocado_Project/
+    ├── avocado_forecasting_paper.tex
+    └── figures/                      # Paper figures (generated)
 ```
