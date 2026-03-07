@@ -4,7 +4,7 @@
 library(tidyverse)
 library(lubridate)
 
-OUT <- "avocado.csv"
+OUT <- "dataset/avocado.csv"
 
 # Generate synthetic data matching paper stats (Jan 2015 - Mar 2018)
 generate_synthetic <- function() {
@@ -49,10 +49,11 @@ generate_synthetic <- function() {
 }
 
 # Main
+dir.create("dataset", showWarnings = FALSE)
 if (file.exists(OUT)) {
-  message("avocado.csv already exists")
+  message("dataset/avocado.csv already exists")
 } else {
-  message("Generating synthetic data (download avocado.csv from Kaggle for real data).")
+  message("Generating synthetic data (download from Kaggle for real data).")
   d <- generate_synthetic()
   write_csv(d, OUT)
   message("Wrote ", OUT)

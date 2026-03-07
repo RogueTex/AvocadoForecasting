@@ -51,7 +51,7 @@ The **Kaggle Avocado Prices** dataset contains historical data on Hass avocado p
 ## Data Loading and Cleaning
 
 ```{r load-data}
-avocado_raw <- read_csv("avocado.csv", show_col_types = FALSE)
+avocado_raw <- read_csv("dataset/avocado.csv", show_col_types = FALSE)
 
 # Basic dimensions
 cat("Rows:", nrow(avocado_raw), "\n")

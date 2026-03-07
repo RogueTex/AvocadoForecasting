@@ -88,6 +88,33 @@ Ljung-Box on ARIMA(1,1,0) residuals: p ≈ 0.86. Residuals consistent with white
 - **Forecast difficulty:** Lower-volume PLU 4770 (median ~700K/week) has higher MAPE (13.9%) than high-volume 4046 (10.9M/week, 7.1%). Fewer units and larger relative shocks make small-volume series harder to forecast.
 - **Business impact:** For $1M weekly avocado revenue, ARIMA reduces forecast error by ~$20K/week vs Naive. At scale, this supports substantial inventory and waste reduction.
 
+## Current State and Where We Left Off
+
+The project delivers production-ready ARIMA models for price and volume forecasting. We completed:
+
+- Full EDA and ACF/PACF-driven model selection
+- ARIMA(1,1,0) for price and ARIMA(0,1,1) for volume and all PLUs
+- Baseline comparison (SES, Naive, Bayesian AR(1))
+- Residual diagnostics and Ljung-Box validation
+- 12-week out-of-sample evaluation and business-value translation
+
+The Bayesian AR(1) on differenced log-prices was tested but underperformed due to cumulative reconstruction error; SARIMA was evaluated but did not improve AICc with ~3 years of data.
+
+## Future Modelling Strategies
+
+Extensions that could improve or extend the current work:
+
+| Direction | Description |
+|-----------|-------------|
+| **SARIMA with more data** | Once 5+ years of data are available, seasonal ARIMA at period 52 may capture annual patterns (e.g. Super Bowl, harvest cycles) more reliably. |
+| **Prophet / ETS with seasonality** | Additive seasonality models (Prophet, ETS with seasonal terms) could handle weekly and annual patterns without the parameter burden of SARIMA. |
+| **Exogenous variables** | Incorporate weather (drought, frost), trade policy (tariffs), and supply-side shocks as regressors in ARIMAX or dynamic regression. |
+| **Regional hierarchical models** | Model TotalUS as an aggregate of regional forecasts, or use hierarchical time series (e.g. `hts`) for coherent national and regional predictions. |
+| **Bayesian ARIMA** | Full Bayesian ARIMA (e.g. via `brms` or Stan) for proper uncertainty quantification without the reconstruction issues of the current AR(1) on differenced log-prices. |
+| **Neural / ML baselines** | LSTM, N-BEATS, or similar for comparison; useful if non-linear patterns or long-range dependencies matter. |
+| **Ensemble methods** | Combine ARIMA with ETS or Prophet via simple averaging or stacking to reduce forecast variance. |
+| **Demand segmentation** | Separate models for organic vs conventional, or bagged vs bulk, if category-level forecasts are needed. |
+
 ## Recommendations
 
 - Use ARIMA(1,1,0) for price and ARIMA(0,1,1) for volume and all PLUs.
@@ -99,7 +126,7 @@ Ljung-Box on ARIMA(1,1,0) residuals: p ≈ 0.86. Residuals consistent with white
 
 ```r
 install.packages(c("fable", "tsibble", "feasts", "fabletools", "tidyverse", "brms", "gt"))
-# If avocado.csv is missing, run: source("scripts/fetch_or_generate_data.R")
+# If dataset/avocado.csv is missing, run: source("scripts/fetch_or_generate_data.R")
 rmarkdown::render("avocado_forecasting_analysis.Rmd")
 # Regenerate README figures: Rscript scripts/run_analysis_and_figures.R
 ```
@@ -110,7 +137,9 @@ Data: [Kaggle Avocado Prices](https://www.kaggle.com/datasets/neuromusic/avocado
 
 ```
 Avocado Project/
-├── avocado.csv                       # Raw data (from Kaggle)
+├── dataset/
+│   ├── avocado.csv                   # Raw data (from Kaggle)
+│   └── README.md                     # Data documentation
 ├── avocado_forecasting_analysis.Rmd   # Main analysis (recommended)
 ├── avocado_plu_forecasting.Rmd       # PLU-only ARIMA workflow
 ├── scripts/

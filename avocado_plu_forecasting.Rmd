@@ -48,7 +48,7 @@ library(lubridate)
 
 ```{r cars}
 # Load the avocado dataset
-avocado <- read_csv("avocado.csv")
+avocado <- read_csv("dataset/avocado.csv")
 
 # View structure
 glimpse(avocado)

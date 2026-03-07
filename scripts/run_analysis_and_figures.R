@@ -1,5 +1,5 @@
 # Run key analysis and export figures for README.
-# Requires: avocado.csv in project root. Run from project root.
+# Requires: dataset/avocado.csv. Run from project root.
 
 suppressPackageStartupMessages({
   library(tidyverse)
@@ -12,11 +12,11 @@ suppressPackageStartupMessages({
 })
 
 # Run from project root: cd "Avocado Project" && Rscript scripts/run_analysis_and_figures.R
-if (!file.exists("avocado.csv")) {
+if (!file.exists("dataset/avocado.csv")) {
   source("scripts/fetch_or_generate_data.R")
 }
 
-avocado_clean <- read_csv("avocado.csv", show_col_types = FALSE) %>%
+avocado_clean <- read_csv("dataset/avocado.csv", show_col_types = FALSE) %>%
   mutate(Date = as.Date(Date), region = as.factor(region), type = as.factor(type)) %>%
   select(Date, AveragePrice, `Total Volume`, `4046`, `4225`, `4770`, type, region) %>%
   rename(average_price = AveragePrice, total_volume = `Total Volume`,

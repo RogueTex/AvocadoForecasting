@@ -29,4 +29,5 @@ tables/
 Thumbs.db
 
 # Data (download from Kaggle or generate via scripts/fetch_or_generate_data.R)
-avocado.csv
+# dataset/avocado.csv is tracked; uncomment to exclude
+# dataset/
