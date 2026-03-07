@@ -1,0 +1,31 @@
+# R
+.RData
+.Rhistory
+.Rproj.user
+*.Rproj
+
+# Knitr / R Markdown output
+*.html
+*.pdf
+
+# LaTeX auxiliary
+*.aux
+*.bbl
+*.blg
+*.log
+*.out
+*.toc
+*.synctex.gz
+*.fls
+*.fdb_latexmk
+
+# Generated outputs (from export_figures_tables.R or Rmd)
+figures/
+tables/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Data (download from Kaggle; uncomment if excluding)
+# avocado.csv

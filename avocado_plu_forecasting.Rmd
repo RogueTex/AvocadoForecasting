@@ -1,0 +1,389 @@
+---
+title: "Aguacate Project"
+author: "Mauro (Not Raghu) and friends"
+date: "2025-12-1"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+warning = FALSE,
+message = FALSE
+)
+```
+
+## 1. Introduction
+### 1.1 Data Set
+The Kaggle Avocado Prices dataset contains historical data on Hass avocado prices and sales volume across multiple US markets from January 2015 through March 2018. The data is sourced from the Hass Avocado Board and represents weekly retail scan data from retailers' cash registers.
+
+### 1.2 Key Characteristics for Time Series Analysis
+
+  Frequency: Weekly observations.
+  
+  Seasonality: Avocado prices exhibit seasonal variations with peaks and troughs at similar times each year.
+  
+  Trend: Both conventional and organic avocados show upward price trends over the period​
+Price Range: Conventional avocados typically range $1–$2; organic avocados range $1.5–$3
+
+## 2. R Environment Setup
+### 2.1 Required Packages and libraries
+```{r}
+
+# Install packages if needed
+# install.packages(c("fable", "tsibble", "feasts", "fabletools", "tidyverse", "lubridate"))
+
+# Load libraries
+library(dplyr)
+library(fable)        
+library(tsibble)      
+library(feasts)       
+library(fabletools)   
+library(tidyverse)    
+library(lubridate)   
+```
+
+
+## 3. Data Preparation
+## 3.1 Loading and Initial Exploration
+
+```{r cars}
+# Load the avocado dataset
+avocado <- read_csv("avocado.csv")
+
+# View structure
+glimpse(avocado)
+
+# Check for missing values
+sum(is.na(avocado))
+
+# Summary statistics
+summary(avocado)
+
+```
+
+## 4. Build Tsibbles for each PLU
+```{r}
+
+
+# Build tsibble for PLU 4046 demand (TotalUS, conventional)
+avocado_4046_ts <- avocado %>%
+  mutate(
+    Date = mdy(Date),
+    Week = yearweek(Date)
+  ) %>%
+  filter(region == "TotalUS", type == "conventional") %>%
+  
+  # Use the correct column name here
+  select(Week, `Small or Medium (4046)`) %>%
+  
+  arrange(Week) %>%
+  as_tsibble(index = Week) %>%
+  rename(demand_4046 = `Small or Medium (4046)`)
+
+avocado_4046_ts
+
+# Build tsibble for PLU 4225 demand (TotalUS, conventional)
+avocado_4225_ts <- avocado %>%
+  mutate(
+    Date = mdy(Date),
+    Week = yearweek(Date)
+  ) %>%
+  filter(region == "TotalUS", type == "conventional") %>%
+  select(Week, `Large (4225)`) %>%
+  arrange(Week) %>%
+  as_tsibble(index = Week) %>%
+  rename(demand_4225 = `Large (4225)`)
+
+avocado_4225_ts
+
+# Build tsibble for PLU 4770 demand (TotalUS, conventional)
+avocado_4770_ts <- avocado %>%
+  mutate(
+    Date = mdy(Date),
+    Week = yearweek(Date)
+  ) %>%
+  filter(region == "TotalUS", type == "conventional") %>%
+  select(Week, `Extra Large (4770)`) %>%
+  arrange(Week) %>%
+  as_tsibble(index = Week) %>%
+  rename(demand_4770 = `Extra Large (4770)`)
+
+avocado_4770_ts
+
+
+
+```
+
+
+
+
+
+
+
+
+## 5. Graph AFC and PACF for each PLU type
+
+```{r}
+# ACF and PACF for PLU 4046 demand
+library(feasts)
+
+gg_tsdisplay(avocado_4046_ts, demand_4046, plot_type = "partial")
+
+gg_tsdisplay(avocado_4225_ts, demand_4225, plot_type = "partial")
+
+gg_tsdisplay(avocado_4770_ts, demand_4770, plot_type = "partial")
+
+
+
+```
+
+## 6. Justification for model selection
+
+### Small or Medium
+“The ACF decays slowly, indicating that the series is non-stationary and requires first differencing (d = 1).
+The PACF shows a strong spike at lag 1 followed by a sharp cutoff, suggesting an autoregressive term of order 1 (p = 1).
+The ACF has a significant spike at lag 1, supporting the inclusion of a moving-average component (q = 1).
+Based on these diagnostics, ARIMA(1,1,0), ARIMA(0,1,1), and ARIMA(1,1,1) were selected as candidate models.”
+
+### Large
+“For PLU 4225 (Large Hass), the ACF shows a slow decay, indicating the need for first differencing (d = 1).
+The PACF displays a dominant spike at lag 1 followed by a sharp decline, suggesting an AR(1) term (p = 1).
+The ACF also has a strong spike at lag 1, supporting the inclusion of a moving-average term (q = 1).
+Based on these diagnostics, ARIMA(1,1,0), ARIMA(0,1,1), and ARIMA(1,1,1) were selected as candidate models for PLU 4225 demand forecasting.”
+
+### Extra Large
+
+“For PLU 4770 (Extra Large Hass), the ACF exhibits a very slow decay from a high initial autocorrelation, indicating that the series is strongly non-stationary and requires first differencing (d = 1).
+The PACF shows a dominant spike at lag 1 followed by a rapid decline, which suggests an AR(1) process (p = 1).
+The ACF also displays a substantial spike at lag 1, supporting the inclusion of a moving-average term (q = 1).
+Thus, ARIMA(1,1,0), ARIMA(0,1,1), and ARIMA(1,1,1) were chosen as candidate models for PLU 4770 demand forecasting.”
+
+## 7. Test Splits
+
+```{r}
+# Train-test split for PLU 4046
+train_end_4046 <- max(avocado_4046_ts$Week) - 12
+
+train_4046 <- avocado_4046_ts[avocado_4046_ts$Week <= train_end_4046, ]
+test_4046  <- avocado_4046_ts[avocado_4046_ts$Week >  train_end_4046, ]
+
+# Train-test split for PLU 4225
+train_end_4225 <- max(avocado_4225_ts$Week) - 12
+
+train_4225 <- avocado_4225_ts[avocado_4225_ts$Week <= train_end_4225, ]
+test_4225  <- avocado_4225_ts[avocado_4225_ts$Week >  train_end_4225, ]
+
+# Train-test split for PLU 4770
+train_end_4770 <- max(avocado_4770_ts$Week) - 12
+
+train_4770 <- avocado_4770_ts[avocado_4770_ts$Week <= train_end_4770, ]
+test_4770  <- avocado_4770_ts[avocado_4770_ts$Week >  train_end_4770, ]
+
+
+```
+
+## 8. Fit Model
+```{r}
+fit_4046_manual <- model(
+  train_4046,
+  arima_110 = ARIMA(demand_4046 ~ pdq(1,1,0)),
+  arima_011 = ARIMA(demand_4046 ~ pdq(0,1,1)),
+  arima_111 = ARIMA(demand_4046 ~ pdq(1,1,1))
+)
+
+fit_4225_manual <- model(
+  train_4225,
+  arima_110 = ARIMA(demand_4225 ~ pdq(1,1,0)),
+  arima_011 = ARIMA(demand_4225 ~ pdq(0,1,1)),
+  arima_111 = ARIMA(demand_4225 ~ pdq(1,1,1))
+)
+
+
+
+fit_4770_manual <- model(
+  train_4770,
+  arima_110 = ARIMA(demand_4770 ~ pdq(1,1,0)),
+  arima_011 = ARIMA(demand_4770 ~ pdq(0,1,1)),
+  arima_111 = ARIMA(demand_4770 ~ pdq(1,1,1))
+)
+
+
+
+
+```
+
+## 9. Compare Model Performance
+```{r}
+glance(fit_4046_manual)[, c(".model", "AICc", "BIC")]
+
+glance(fit_4225_manual)[, c(".model", "AICc", "BIC")]
+
+glance(fit_4770_manual)[, c(".model", "AICc", "BIC")]
+
+
+```
+
+### 9.1 Interpretation
+“To evaluate the candidate ARIMA models for each PLU, AICc was used as the selection criterion.
+For PLU 4046, PLU 4225, and PLU 4770, the ARIMA(0,1,1) model achieved the lowest AICc among the candidate models (ARIMA(1,1,0), ARIMA(0,1,1), and ARIMA(1,1,1)).
+This result is consistent with the ACF/PACF diagnostics, which showed strong lag-1 autocorrelation and a sharp cutoff in the PACF after lag 1.
+Therefore, ARIMA(0,1,1) was selected as the preferred forecasting model for all three PLUs.”
+
+
+## 10. Train on Best Model
+
+```{r}
+best_4046 <- model(train_4046, best = ARIMA(demand_4046 ~ pdq(0,1,1)))
+
+best_4225 <- model(train_4225, best = ARIMA(demand_4225 ~ pdq(0,1,1)))
+
+best_4770 <- model(train_4770, best = ARIMA(demand_4770 ~ pdq(0,1,1)))
+
+```
+
+
+
+
+
+## 11. Forecast and Error Values
+```{r}
+# Forecast for PLU 4046 (12 weeks ahead)
+fc_4046 <- forecast(best_4046, h = nrow(test_4046))
+
+# Plot forecast vs actual
+autoplot(fc_4046) +
+  autolayer(train_4046, demand_4046) +
+  autolayer(test_4046, demand_4046, colour = "black") +
+  labs(
+    title = "PLU 4046 Demand Forecast vs Actual",
+    x = "Week",
+    y = "Demand (4046)"
+  )
+
+# Forecast accuracy
+accuracy(fc_4046, test_4046)
+
+# Forecast for PLU 4225 (12 weeks ahead)
+fc_4225 <- forecast(best_4225, h = nrow(test_4225))
+
+# Plot forecast vs actual
+autoplot(fc_4225) +
+  autolayer(train_4225, demand_4225) +
+  autolayer(test_4225, demand_4225, colour = "black") +
+  labs(
+    title = "PLU 4225 Demand Forecast vs Actual",
+    x = "Week",
+    y = "Demand (4225)"
+  )
+
+# Forecast accuracy
+accuracy(fc_4225, test_4225)
+
+# Forecast for PLU 4770 (12 weeks ahead)
+fc_4770 <- forecast(best_4770, h = nrow(test_4770))
+
+# Plot forecast vs actual
+autoplot(fc_4770) +
+  autolayer(train_4770, demand_4770) +
+  autolayer(test_4770, demand_4770, colour = "black") +
+  labs(
+    title = "PLU 4770 Demand Forecast vs Actual",
+    x = "Week",
+    y = "Demand (4770)"
+  )
+
+# Forecast accuracy
+accuracy(fc_4770, test_4770)
+
+
+```
+## 11.1 Interpretation
+
+“Out-of-sample forecast accuracy was evaluated using the last 12 weeks of data for each PLU. For PLU 4046, the ARIMA(0,1,1) model achieved an RMSE of about 1.21 million units and a MAPE of 7.1%, meaning the forecasts were on average within roughly seven percent of actual weekly demand. PLU 4225 showed similar performance with an RMSE of 1.25 million and MAPE of 8.7%.
+For PLU 4770, the RMSE was smaller in absolute terms (≈126 thousand units) due to the lower demand level, but the MAPE was higher at 13.9%, indicating that extra-large avocados are more difficult to predict on a percentage basis. Overall, the ARIMA(0,1,1) specification provides reasonably accurate short-term forecasts for high-volume PLUs 4046 and 4225, with somewhat higher relative error for the more volatile, lower-volume PLU 4770.”
+
+```{r}
+
+```
+
+
+
+
+
+
+
+```{r}
+
+```
+
+
+
+
+
+
+
+
+```{r}
+
+```
+
+
+
+
+
+
+
+
+```{r}
+
+```
+
+
+
+
+
+
+
+
+```{r}
+
+```
+
+
+
+
+
+
+
+
+```{r}
+
+```
+
+
+
+
+
+
+
+```{r}
+
+```
+
+
+
+
+
+
+```{r}
+
+```
+
+
+
+
+
+
+```{r}
+
+```

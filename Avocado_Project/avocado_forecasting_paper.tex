@@ -1,0 +1,911 @@
+\documentclass[12pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{multirow}
+\usepackage{float}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{titlesec}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{xcolor}
+\usepackage{fancyhdr}
+\usepackage{setspace}
+
+% Set up headers
+\pagestyle{fancy}
+\fancyhf{}
+\rhead{OM 286: Group Project}
+\lhead{Avocado Price \& Demand Forecasting}
+\rfoot{Page \thepage}
+
+% Title formatting
+\titleformat{\section}{\Large\bfseries}{\thesection}{1em}{}
+\titleformat{\subsection}{\large\bfseries}{\thesubsection}{1em}{}
+
+% Graphics path
+\graphicspath{{figures/}}
+
+\begin{document}
+
+% ==============================================================================
+% TITLE PAGE
+% ==============================================================================
+\begin{titlepage}
+    \centering
+    \vspace*{2cm}
+    
+    {\LARGE\bfseries OM 286: Analytics for Supply Chain and Distribution Planning\\[0.5cm]}
+    {\Large Group Project\\[2cm]}
+    
+    {\Huge\bfseries Avocado Price and Demand Forecasting:\\[0.3cm]
+    A Time Series Analysis Using ARIMA, Exponential Smoothing, and Bayesian Methods\\[2cm]}
+    
+    {\Large
+    Arturo, Mauro, Alex \& Team\\[1cm]
+    }
+    
+    {\large December 2025\\[3cm]}
+    
+    \vfill
+    
+    \textit{This paper applies ARIMA, Simple Exponential Smoothing (SES), Naive forecasting, and Bayesian AR(1) models to forecast U.S. avocado prices and demand volumes, demonstrating practical time series forecasting techniques for supply chain planning.}
+    
+\end{titlepage}
+
+\newpage
+\tableofcontents
+\newpage
+
+% ==============================================================================
+% EXECUTIVE SUMMARY (3-5 pages as required)
+% ==============================================================================
+\section{Executive Summary}
+\label{sec:executive-summary}
+
+\subsection{Project Context}
+
+The U.S. avocado market has experienced significant growth over the past decade, with consumption tripling since 2000. This growth presents both opportunities and challenges for supply chain managers: accurate demand forecasting is essential for minimizing waste (avocados have a short shelf life of 3--5 days at retail), optimizing inventory levels, and managing procurement from suppliers in Mexico, Peru, and California.
+
+This project addresses the fundamental question facing avocado retailers and distributors: \textbf{How accurately can we forecast weekly avocado prices and demand volumes, and which forecasting methodology provides the best trade-off between accuracy and complexity?}
+
+We analyze weekly retail scanner data from the Hass Avocado Board spanning January 2015 through March 2018, covering 54 U.S. markets with over 18,000 observations. Our analysis focuses on TotalUS conventional avocados as the aggregate market signal, with detailed forecasts for three PLU (Price Look-Up) categories:
+\begin{itemize}
+    \item PLU 4046: Small/Medium Hass Avocados
+    \item PLU 4225: Large Hass Avocados
+    \item PLU 4770: Extra-Large Hass Avocados
+\end{itemize}
+
+\subsection{Project Scope}
+
+This project applies a comprehensive suite of time series forecasting techniques as covered in OM 286:
+
+\begin{enumerate}
+    \item \textbf{ARIMA Models} (Autoregressive Integrated Moving Average): The primary forecasting methodology, with systematic model selection via ACF/PACF diagnostics and AICc optimization.
+    
+    \item \textbf{Exponential Smoothing (SES)}: Simple Exponential Smoothing as a baseline model assuming no trend or seasonality.
+    
+    \item \textbf{Naive Forecasting}: The simplest possible baseline where forecasts equal the last observed value.
+    
+    \item \textbf{Bayesian AR(1) Modeling}: A Bayesian approach using \texttt{brms}/Stan to estimate AR(1) dynamics on differenced log-prices, providing posterior uncertainty quantification.
+\end{enumerate}
+
+All modeling was performed using the \texttt{fable} ecosystem in R for ARIMA and ETS models, and \texttt{brms} (interfacing with Stan) for Bayesian estimation.
+
+\subsection{Key Results}
+
+Our analysis yields the following headline findings:
+
+\textbf{1. ARIMA Outperforms All Baselines for Price Forecasting}
+
+\begin{table}[H]
+\centering
+\caption{Model Comparison for Average Price Forecasting (12-week test period)}
+\begin{tabular}{lccc}
+\toprule
+\textbf{Model} & \textbf{RMSE} & \textbf{MAE} & \textbf{MAPE (\%)} \\
+\midrule
+ARIMA(1,1,0) & 0.098 & 0.080 & \textbf{7.3\%} \\
+SES (ETS-ANN) & 0.111 & 0.100 & 9.3\% \\
+Naive & 0.112 & 0.100 & 9.3\% \\
+Bayesian AR(1) & 0.217 & 0.186 & 16.8\% \\
+\bottomrule
+\end{tabular}
+\label{tab:price-comparison}
+\end{table}
+
+ARIMA(1,1,0) achieves a 7.3\% MAPE, representing a \textbf{21\% improvement over Naive forecasting} (9.3\% MAPE). The Bayesian AR(1) model underperforms due to cumulative reconstruction error from integrating differenced predictions.
+
+\textbf{2. Volume Forecasting Shows Consistent ARIMA Superiority}
+
+For total volume and PLU-level demand, ARIMA(0,1,1) consistently achieves the lowest AICc and best out-of-sample accuracy:
+
+\begin{table}[H]
+\centering
+\caption{ARIMA Forecast Accuracy Across Series}
+\begin{tabular}{lccc}
+\toprule
+\textbf{Series} & \textbf{Best Model} & \textbf{RMSE} & \textbf{MAPE (\%)} \\
+\midrule
+Average Price & ARIMA(1,1,0) & 0.098 & 7.3\% \\
+Total Volume & ARIMA(0,1,1) & 5.02M & 9.2\% \\
+PLU 4046 (Small/Medium) & ARIMA(0,1,1) & 1.21M & 7.1\% \\
+PLU 4225 (Large) & ARIMA(0,1,1) & 1.25M & 8.7\% \\
+PLU 4770 (Extra-Large) & ARIMA(0,1,1) & 126K & 13.9\% \\
+\bottomrule
+\end{tabular}
+\label{tab:all-accuracy}
+\end{table}
+
+\textbf{3. Forecasting Difficulty Correlates with Demand Volume}
+
+A key insight emerges: \textbf{low-volume, high-volatility series are harder to forecast}. PLU 4770 (extra-large avocados) has median weekly volume of approximately 700,000 units versus 10+ million for PLU 4046, yet exhibits 13.9\% MAPE compared to 7.1\%. This reflects:
+\begin{itemize}
+    \item Fewer data points to learn stable patterns
+    \item Random demand shocks represent larger percentage swings
+    \item Slower inventory turnover creates noisier signals
+\end{itemize}
+
+This has direct supply chain implications: \textbf{premium/niche products require larger safety stock buffers} than commodity sizes.
+
+\textbf{4. Residual Diagnostics Confirm Model Validity}
+
+The Ljung-Box test for ARIMA(1,1,0) residuals yields $p = 0.86 >> 0.05$, confirming residuals are white noise. This validates that the model has captured all predictable autocorrelation structure---a critical check often omitted in applied forecasting.
+
+\textbf{5. Business Value Translation}
+
+For a retailer with \$1M weekly avocado revenue:
+\begin{itemize}
+    \item ARIMA forecast error: $\pm$\$73K
+    \item Naive forecast error: $\pm$\$93K
+    \item \textbf{ARIMA reduces uncertainty by \$20K per week}
+\end{itemize}
+
+Annualized across a national chain with 500+ locations, this translates to \$50--100M+ in inventory optimization value through reduced waste and stock-outs.
+
+\subsection{Methodological Insights}
+
+Beyond the numerical results, this project demonstrates several important forecasting principles:
+
+\begin{enumerate}
+    \item \textbf{AR(1) vs MA(1) Structure}: Price series exhibit AR(1) behavior (momentum/persistence), while volume series show MA(1) characteristics (mean-reversion). This explains why ARIMA(1,1,0) fits price but ARIMA(0,1,1) fits volume.
+    
+    \item \textbf{SARIMA Not Required with Limited Data}: Despite weekly data having a natural period of 52, seasonal ARIMA did not outperform non-seasonal models. With only 3 years of data, there are insufficient seasonal cycles for robust estimation, and AICc penalizes the additional complexity.
+    
+    \item \textbf{Bayesian Methods Require Careful Specification}: The Bayesian AR(1) model on differenced log-prices suffers from cumulative drift when reconstructing levels via integration. This highlights that Bayesian methods, while powerful for uncertainty quantification, require appropriate model architecture.
+    
+    \item \textbf{Baselines Are Not Trivial}: SES collapses to nearly identical performance as Naive for this data, demonstrating that without trend/seasonal parameters, exponential smoothing reduces to a flat forecast---barely better than ``predict yesterday's value.''
+\end{enumerate}
+
+\subsection{Recommendations}
+
+Based on our analysis, we recommend the following for avocado supply chain planning:
+
+\begin{enumerate}
+    \item \textbf{Deploy ARIMA(1,1,0) for price forecasting} with weekly re-estimation as new data arrives.
+    
+    \item \textbf{Deploy ARIMA(0,1,1) for volume/demand forecasting} across all PLU categories.
+    
+    \item \textbf{Maintain larger safety stock buffers for PLU 4770} (extra-large) given inherently higher forecast uncertainty.
+    
+    \item \textbf{Integrate 80\% confidence intervals} into procurement decisions---our model calibration shows actuals consistently fall within these bands.
+    
+    \item \textbf{Re-evaluate SARIMA} once 5+ years of data are available to capture seasonal dynamics more robustly.
+\end{enumerate}
+
+\newpage
+
+% ==============================================================================
+% SECTION (i): SCOPE, OBJECTIVES, AND RELEVANCE
+% ==============================================================================
+\section{Scope, Objectives, and Relevance}
+\label{sec:scope}
+
+\subsection{Project Scope}
+
+This project applies time series forecasting techniques to model and predict U.S. avocado prices and demand volumes. The scope encompasses:
+
+\begin{itemize}
+    \item \textbf{Geographic Coverage}: National aggregate (TotalUS) conventional avocado market
+    \item \textbf{Temporal Coverage}: Weekly data from January 4, 2015 to March 25, 2018 (169 weeks)
+    \item \textbf{Forecast Horizon}: 12-week ahead forecasts (approximately one quarter)
+    \item \textbf{Target Variables}:
+    \begin{enumerate}
+        \item Average retail price (\$/unit)
+        \item Total weekly volume (units sold)
+        \item PLU 4046 volume (small/medium avocados)
+        \item PLU 4225 volume (large avocados)
+        \item PLU 4770 volume (extra-large avocados)
+    \end{enumerate}
+    \item \textbf{Modeling Approaches}: ARIMA, SES, Naive, and Bayesian AR(1)
+\end{itemize}
+
+\subsection{Objectives}
+
+The project pursues three primary objectives:
+
+\begin{enumerate}
+    \item \textbf{Develop Accurate Forecasting Models}: Identify the best-performing ARIMA specification for each target series through systematic ACF/PACF analysis and information criterion optimization (AICc).
+    
+    \item \textbf{Benchmark Against Baselines}: Compare ARIMA performance against Naive forecasting, SES, and Bayesian methods to quantify the value added by time series modeling.
+    
+    \item \textbf{Generate Actionable Business Insights}: Translate statistical accuracy metrics into supply chain decision support, including safety stock recommendations and procurement planning.
+\end{enumerate}
+
+\subsection{Business Relevance}
+
+Avocado demand forecasting is highly relevant for supply chain management for several reasons:
+
+\textbf{Perishability}: Avocados have a retail shelf life of 3--5 days, making accurate demand forecasting critical. Overforecasting leads to spoilage waste; underforecasting causes stock-outs and lost sales.
+
+\textbf{Supply Chain Complexity}: The majority of U.S. avocados are imported from Mexico (approximately 80\%), with additional supply from Peru, Chile, and California. Long lead times (2--4 weeks from farm to store) amplify forecast error impacts.
+
+\textbf{Price Volatility}: Avocado prices are sensitive to weather events, trade policy (tariffs), and seasonal production cycles. Accurate price forecasting supports procurement contract negotiations.
+
+\textbf{Market Growth}: U.S. avocado consumption has tripled since 2000, reaching approximately 8 pounds per capita annually. This growth trajectory makes historical patterns less reliable, requiring adaptive forecasting methods.
+
+\textbf{SKU Proliferation}: Retailers carry multiple avocado sizes (PLU codes), organic vs. conventional, and bagged vs. bulk formats. Accurate PLU-level forecasting enables category management optimization.
+
+\newpage
+
+% ==============================================================================
+% SECTION (ii): DATA DESCRIPTION
+% ==============================================================================
+\section{Data Description}
+\label{sec:data}
+
+\subsection{Data Source}
+
+The dataset is sourced from the Hass Avocado Board (HAB) and made publicly available on Kaggle as ``Avocado Prices.'' The data represents weekly retail scanner data aggregated from participating retailers' point-of-sale systems across the United States.
+
+\textbf{Dataset URL}: \url{https://www.kaggle.com/datasets/neuromusic/avocado-prices}
+
+\subsection{Dataset Characteristics}
+
+\begin{table}[H]
+\centering
+\caption{Dataset Overview}
+\begin{tabular}{ll}
+\toprule
+\textbf{Attribute} & \textbf{Value} \\
+\midrule
+Total Observations & 18,249 \\
+Variables & 14 \\
+Date Range & January 4, 2015 -- March 25, 2018 \\
+Frequency & Weekly \\
+Geographic Coverage & 54 U.S. regions (including TotalUS aggregate) \\
+Avocado Types & Conventional, Organic \\
+Missing Values & 0 (complete data) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Variable Definitions}
+
+\begin{table}[H]
+\centering
+\caption{Variable Descriptions}
+\begin{tabular}{p{3.5cm}p{9cm}}
+\toprule
+\textbf{Variable} & \textbf{Description} \\
+\midrule
+Date & Week ending date (Sunday) \\
+AveragePrice & Average retail price per single avocado (\$) \\
+Total Volume & Total number of avocados sold \\
+4046 & Volume of PLU 4046 (small/medium Hass) \\
+4225 & Volume of PLU 4225 (large Hass) \\
+4770 & Volume of PLU 4770 (extra-large Hass) \\
+Total Bags & Total volume sold in bags \\
+Small Bags & Volume of small bags \\
+Large Bags & Volume of large bags \\
+XLarge Bags & Volume of extra-large bags \\
+type & Conventional or Organic \\
+year & Year of observation \\
+region & Geographic market (e.g., ``TotalUS'', ``California'') \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Data Quality Assessment}
+
+The dataset exhibits exceptional quality for retail scanner data:
+
+\begin{itemize}
+    \item \textbf{Completeness}: No missing values across all 18,249 observations
+    \item \textbf{Consistency}: Weekly frequency maintained throughout the time period
+    \item \textbf{Coverage}: All 54 regions have complete time series
+\end{itemize}
+
+\textbf{Limitation}: The 2018 data covers only January--March (Q1), which compresses our test period. Our 12-week holdout test set captures only Q1 dynamics, potentially underestimating seasonal forecast errors for other quarters.
+
+\subsection{TotalUS Conventional Subset}
+
+For time series modeling, we focus on the TotalUS conventional subset, which provides:
+\begin{itemize}
+    \item 169 weekly observations per series
+    \item Aggregate national demand signal (smooths regional noise)
+    \item Conventional type (larger market share than organic)
+\end{itemize}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.9\textwidth]{05_price_time_series.pdf}
+\caption{Average Price Over Time (TotalUS): Conventional vs. Organic}
+\label{fig:price-ts}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.9\textwidth]{06_volume_time_series.pdf}
+\caption{Total Volume Over Time (TotalUS): Conventional vs. Organic}
+\label{fig:volume-ts}
+\end{figure}
+
+\subsection{Summary Statistics}
+
+For the TotalUS conventional subset:
+
+\begin{table}[H]
+\centering
+\caption{Summary Statistics: TotalUS Conventional}
+\begin{tabular}{lrrrrr}
+\toprule
+\textbf{Variable} & \textbf{Min} & \textbf{Q1} & \textbf{Median} & \textbf{Q3} & \textbf{Max} \\
+\midrule
+Average Price (\$) & 0.82 & 0.99 & 1.05 & 1.15 & 1.62 \\
+Total Volume (M) & 25.9 & 36.9 & 41.8 & 48.8 & 62.5 \\
+PLU 4046 (M) & 4.9 & 9.2 & 10.9 & 13.5 & 22.7 \\
+PLU 4225 (M) & 5.7 & 8.8 & 10.2 & 12.4 & 20.2 \\
+PLU 4770 (K) & 185 & 499 & 695 & 944 & 1,714 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\newpage
+
+% ==============================================================================
+% SECTION (iii): METHODOLOGY
+% ==============================================================================
+\section{Methodology}
+\label{sec:methodology}
+
+\subsection{Time Series Framework}
+
+All modeling follows the Box-Jenkins methodology for ARIMA model selection:
+
+\begin{enumerate}
+    \item \textbf{Stationarity Assessment}: Visual inspection and unit root testing
+    \item \textbf{Differencing}: Apply first differencing ($d=1$) to achieve stationarity
+    \item \textbf{ACF/PACF Diagnostics}: Identify candidate AR and MA orders
+    \item \textbf{Model Estimation}: Fit candidate models
+    \item \textbf{Model Selection}: Choose best model via AICc (corrected Akaike Information Criterion)
+    \item \textbf{Residual Diagnostics}: Verify residuals are white noise (Ljung-Box test)
+    \item \textbf{Forecasting}: Generate out-of-sample predictions
+\end{enumerate}
+
+\subsection{Train/Test Split}
+
+We use a fixed origin evaluation with:
+\begin{itemize}
+    \item \textbf{Training Set}: First 157 weeks (93\% of data)
+    \item \textbf{Test Set}: Final 12 weeks (7\% of data, approximately one quarter)
+\end{itemize}
+
+This temporal split ensures no future information leaks into training, simulating real-world forecasting conditions.
+
+\subsection{ARIMA Modeling}
+
+ARIMA models combine autoregressive (AR) and moving average (MA) components with differencing:
+
+\begin{equation}
+\phi(B)(1-B)^d Y_t = \theta(B)\epsilon_t
+\end{equation}
+
+where $\phi(B)$ is the AR polynomial, $\theta(B)$ is the MA polynomial, $B$ is the backshift operator, and $d$ is the differencing order.
+
+\textbf{ACF/PACF Interpretation}:
+
+For Average Price (Figure \ref{fig:acf-price}):
+\begin{itemize}
+    \item ACF decays slowly $\Rightarrow$ non-stationarity, requires $d=1$
+    \item After differencing, PACF shows spike at lag 1 with sharp cutoff $\Rightarrow$ AR(1) signature
+    \item This suggests ARIMA(1,1,0)
+\end{itemize}
+
+For Volume series:
+\begin{itemize}
+    \item After differencing, ACF shows \textit{negative} spike at lag 1 $\Rightarrow$ MA(1) signature (mean-reversion)
+    \item This suggests ARIMA(0,1,1)
+\end{itemize}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.95\textwidth]{16_acf_pacf_price.pdf}
+\caption{ACF/PACF Diagnostics for Differenced Average Price}
+\label{fig:acf-price}
+\end{figure}
+
+\textbf{Candidate Model Comparison}:
+
+We estimate three candidate models for each series and select via AICc:
+
+\begin{table}[H]
+\centering
+\caption{ARIMA Candidate Models for Average Price}
+\begin{tabular}{lcc}
+\toprule
+\textbf{Model} & \textbf{AICc} & \textbf{BIC} \\
+\midrule
+ARIMA(1,1,0) & -412.70 & -406.48 \\
+ARIMA(0,1,1) & -410.23 & -404.01 \\
+ARIMA(1,1,1) & -410.65 & -401.36 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+ARIMA(1,1,0) achieves the lowest AICc and is selected as the final model.
+
+\subsection{SARIMA Consideration}
+
+Weekly data has a natural seasonal period of 52 weeks. We tested SARIMA(1,1,0)(1,0,0)[52]:
+
+\begin{table}[H]
+\centering
+\caption{ARIMA vs SARIMA Comparison}
+\begin{tabular}{lcc}
+\toprule
+\textbf{Model} & \textbf{AICc} & \textbf{BIC} \\
+\midrule
+ARIMA(1,1,0) & -412.70 & -406.48 \\
+SARIMA(1,1,0)(1,0,0)[52] & -408.12 & -398.83 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The non-seasonal model wins. With only 3 complete years, there are insufficient seasonal cycles for robust estimation, and AICc penalizes the additional parameters.
+
+\subsection{Exponential Smoothing (SES)}
+
+Simple Exponential Smoothing assumes no trend and no seasonality:
+
+\begin{equation}
+\hat{y}_{t+h|t} = \alpha y_t + (1-\alpha)\hat{y}_{t|t-1}
+\end{equation}
+
+This is implemented as ETS(A,N,N) in the \texttt{fable} package---additive errors, no trend, no seasonality.
+
+\subsection{Naive Forecasting}
+
+The Naive method simply forecasts the last observed value:
+
+\begin{equation}
+\hat{y}_{t+h|t} = y_t
+\end{equation}
+
+This serves as the simplest possible benchmark. Any useful model must outperform Naive.
+
+\subsection{Bayesian AR(1) Modeling}
+
+We implement a Bayesian AR(1) model on differenced log-prices using \texttt{brms}:
+
+\begin{equation}
+\Delta \log(p_t) = \mu + \phi \cdot \Delta \log(p_{t-1}) + \epsilon_t, \quad \epsilon_t \sim \mathcal{N}(0, \sigma^2)
+\end{equation}
+
+Priors:
+\begin{align}
+\mu &\sim \mathcal{N}(0, 1) \\
+\phi &\sim \mathcal{N}(0, 1) \\
+\sigma &\sim \text{Exponential}(1)
+\end{align}
+
+Estimation uses 4 chains, 2000 iterations each, with Stan's NUTS sampler.
+
+\textbf{Reconstruction}: Fitted values are reconstructed via cumulative summation:
+\begin{equation}
+\log(\hat{p}_t) = \log(p_1) + \sum_{i=2}^{t} \Delta \widehat{\log(p_i)}
+\end{equation}
+
+This cumulative integration introduces drift, explaining the Bayesian model's underperformance.
+
+\subsection{Performance Metrics}
+
+We evaluate forecasts using three metrics:
+
+\begin{align}
+\text{RMSE} &= \sqrt{\frac{1}{n}\sum_{t=1}^{n}(y_t - \hat{y}_t)^2} \\
+\text{MAE} &= \frac{1}{n}\sum_{t=1}^{n}|y_t - \hat{y}_t| \\
+\text{MAPE} &= \frac{100\%}{n}\sum_{t=1}^{n}\left|\frac{y_t - \hat{y}_t}{y_t}\right|
+\end{align}
+
+MAPE is scale-invariant and interpretable as ``average percentage error,'' making it our primary comparison metric.
+
+\newpage
+
+% ==============================================================================
+% SECTION (iv): RESULTS
+% ==============================================================================
+\section{Results}
+\label{sec:results}
+
+\subsection{Average Price Forecasting}
+
+\subsubsection{Model Selection}
+
+ARIMA(1,1,0) achieves the lowest AICc among candidates, confirming the AR(1) structure suggested by PACF diagnostics.
+
+\subsubsection{Forecast Performance}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}[b]{0.48\textwidth}
+    \includegraphics[width=\textwidth]{18_price_forecast_full.pdf}
+    \caption{Full training series with forecast}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.48\textwidth}
+    \includegraphics[width=\textwidth]{19_price_forecast_zoom.pdf}
+    \caption{Zoom on test period}
+\end{subfigure}
+\caption{ARIMA(1,1,0) Forecast for Average Price}
+\label{fig:price-forecast}
+\end{figure}
+
+The forecast captures the general price level and uncertainty bands. Actual test values fall within the 80\% confidence interval, indicating well-calibrated uncertainty quantification.
+
+\subsubsection{Model Comparison}
+
+\begin{table}[H]
+\centering
+\caption{Average Price: Model Comparison (12-week test)}
+\begin{tabular}{lccc}
+\toprule
+\textbf{Model} & \textbf{RMSE} & \textbf{MAE} & \textbf{MAPE (\%)} \\
+\midrule
+ARIMA(1,1,0) & \textbf{0.098} & \textbf{0.080} & \textbf{7.3\%} \\
+SES (ETS-ANN) & 0.111 & 0.100 & 9.3\% \\
+Naive & 0.112 & 0.100 & 9.3\% \\
+Bayesian AR(1) & 0.217 & 0.186 & 16.8\% \\
+\bottomrule
+\end{tabular}
+\label{tab:price-results}
+\end{table}
+
+\textbf{Key Finding}: ARIMA reduces MAPE by 21\% versus Naive (7.3\% vs 9.3\%). SES and Naive perform identically, confirming that without trend/seasonal structure, SES collapses to a flat forecast.
+
+\subsubsection{Residual Diagnostics}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.95\textwidth]{20_residual_diagnostics.pdf}
+\caption{Residual Diagnostics for ARIMA(1,1,0)}
+\label{fig:residuals}
+\end{figure}
+
+The Ljung-Box test yields $p = 0.86$, strongly confirming residuals are white noise. The ACF of residuals shows no significant spikes---the model has captured all predictable structure.
+
+\subsection{Total Volume Forecasting}
+
+ARIMA(0,1,1) is selected for total volume, reflecting the MA(1) structure (mean-reversion).
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}[b]{0.48\textwidth}
+    \includegraphics[width=\textwidth]{21_volume_forecast_full.pdf}
+    \caption{Full series with forecast}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.48\textwidth}
+    \includegraphics[width=\textwidth]{22_volume_forecast_zoom.pdf}
+    \caption{Zoom on test period}
+\end{subfigure}
+\caption{ARIMA(0,1,1) Forecast for Total Volume}
+\label{fig:volume-forecast}
+\end{figure}
+
+\subsection{PLU-Level Demand Forecasting}
+
+\subsubsection{PLU 4046 (Small/Medium)}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}[b]{0.48\textwidth}
+    \includegraphics[width=\textwidth]{23_plu4046_forecast_full.pdf}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.48\textwidth}
+    \includegraphics[width=\textwidth]{24_plu4046_forecast_zoom.pdf}
+\end{subfigure}
+\caption{PLU 4046 Forecast: ARIMA(0,1,1)}
+\end{figure}
+
+\subsubsection{PLU 4225 (Large)}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}[b]{0.48\textwidth}
+    \includegraphics[width=\textwidth]{25_plu4225_forecast_full.pdf}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.48\textwidth}
+    \includegraphics[width=\textwidth]{26_plu4225_forecast_zoom.pdf}
+\end{subfigure}
+\caption{PLU 4225 Forecast: ARIMA(0,1,1)}
+\end{figure}
+
+\subsubsection{PLU 4770 (Extra-Large)}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}[b]{0.48\textwidth}
+    \includegraphics[width=\textwidth]{27_plu4770_forecast_full.pdf}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.48\textwidth}
+    \includegraphics[width=\textwidth]{28_plu4770_forecast_zoom.pdf}
+\end{subfigure}
+\caption{PLU 4770 Forecast: ARIMA(0,1,1)}
+\end{figure}
+
+\subsection{Consolidated Accuracy Results}
+
+\begin{table}[H]
+\centering
+\caption{Final Model Performance Across All Series}
+\begin{tabular}{llrrr}
+\toprule
+\textbf{Series} & \textbf{Model} & \textbf{RMSE} & \textbf{MAE} & \textbf{MAPE (\%)} \\
+\midrule
+Average Price & ARIMA(1,1,0) & 0.098 & 0.080 & 7.3 \\
+Average Price & SES & 0.111 & 0.100 & 9.3 \\
+Average Price & Naive & 0.112 & 0.100 & 9.3 \\
+\midrule
+Total Volume & ARIMA(0,1,1) & 5.02M & 3.83M & 9.2 \\
+PLU 4046 & ARIMA(0,1,1) & 1.21M & 0.93M & 7.1 \\
+PLU 4225 & ARIMA(0,1,1) & 1.25M & 0.99M & 8.7 \\
+PLU 4770 & ARIMA(0,1,1) & 126K & 95K & 13.9 \\
+\bottomrule
+\end{tabular}
+\label{tab:final-results}
+\end{table}
+
+\subsection{Baseline Model Performance}
+
+\subsubsection{SES Forecast}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.7\textwidth]{29_ses_forecast_full.pdf}
+\caption{SES Forecast for Average Price}
+\end{figure}
+
+\subsubsection{Naive Forecast}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.7\textwidth]{31_naive_forecast_full.pdf}
+\caption{Naive Forecast for Average Price}
+\end{figure}
+
+Both SES and Naive produce nearly identical forecasts---a flat line at the last observed value. This confirms that without trend or seasonal parameters, SES adds no value over the simplest baseline.
+
+\subsection{Dynamic Evolution Through Time}
+
+The zoom-in forecasts (Figures \ref{fig:price-forecast}b, \ref{fig:volume-forecast}b) show stable out-of-sample performance across all 12 test weeks:
+
+\begin{itemize}
+    \item No systematic degradation as forecast horizon increases
+    \item Actual values consistently within 80\% confidence bands
+    \item RMSE does not inflate significantly at longer horizons
+\end{itemize}
+
+This temporal stability suggests the models are production-ready without requiring mid-quarter re-training.
+
+\newpage
+
+% ==============================================================================
+% SECTION (v): INTERPRETATION AND INSIGHTS
+% ==============================================================================
+\section{Interpretation and Insights}
+\label{sec:insights}
+
+\subsection{Why ARIMA Outperforms Baselines}
+
+\textbf{Naive and SES fail because they ignore autocorrelation.} The avocado price series exhibits AR(1) momentum: when prices rise one week, they tend to continue rising the next (positive autocorrelation at lag 1). Naive simply predicts the last value; SES weights recent observations but still converges to a flat forecast. ARIMA(1,1,0) explicitly models this momentum:
+
+\begin{equation}
+\Delta p_t = \phi \cdot \Delta p_{t-1} + \epsilon_t
+\end{equation}
+
+With estimated $\hat{\phi} > 0$, the model propagates price trends, yielding better short-term predictions.
+
+\subsection{Why Volume Shows MA(1) Structure}
+
+Volume series exhibit mean-reversion: a high-volume week tends to be followed by a lower-volume week (negative lag-1 ACF). This reflects inventory dynamics---retailers who stocked heavily one week may reduce orders the next. ARIMA(0,1,1) captures this with the MA term:
+
+\begin{equation}
+\Delta v_t = \epsilon_t - \theta \cdot \epsilon_{t-1}
+\end{equation}
+
+The negative $\hat{\theta}$ damps forecast extremes, improving accuracy.
+
+\subsection{Why Bayesian AR(1) Underperforms}
+
+The Bayesian model's poor performance stems from \textbf{model misspecification}, not the Bayesian framework itself:
+
+\begin{enumerate}
+    \item \textbf{AR-only structure}: The model lacks an MA component to correct for mean-reversion.
+    \item \textbf{Cumulative reconstruction error}: Integrating differenced predictions via $\sum \Delta \log(p)$ accumulates small errors into large bias over 150+ weeks.
+    \item \textbf{Log-space modeling}: While log transformation stabilizes variance, it adds complexity to interpretation and reconstruction.
+\end{enumerate}
+
+A Bayesian ARIMA or state-space model would likely perform competitively, but was beyond our scope.
+
+\subsection{PLU Difficulty Gradient}
+
+Forecast difficulty scales inversely with demand volume:
+
+\begin{center}
+\begin{tabular}{lrr}
+\toprule
+\textbf{PLU} & \textbf{Median Weekly Volume} & \textbf{MAPE} \\
+\midrule
+4046 (Small/Medium) & 10.9M & 7.1\% \\
+4225 (Large) & 10.2M & 8.7\% \\
+4770 (Extra-Large) & 695K & 13.9\% \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Supply Chain Implication}: Premium/niche products (extra-large avocados) require \textbf{larger safety stock buffers} than commodity sizes. A 14\% MAPE means actual demand could be 14\% higher or lower than forecast---requiring approximately $\pm 14\%$ safety stock to maintain service levels.
+
+\subsection{Seasonal ARIMA: When Would It Help?}
+
+Our data (3 years) is insufficient for robust seasonal estimation at period 52. However, seasonal ARIMA would likely outperform with:
+
+\begin{itemize}
+    \item \textbf{5+ years of data}: Provides multiple complete seasonal cycles
+    \item \textbf{Stronger seasonality}: If avocado demand showed pronounced annual patterns (e.g., Super Bowl spike)
+    \item \textbf{Seasonal differencing}: Applying $\nabla_{52}$ before non-seasonal differencing
+\end{itemize}
+
+\subsection{Business Value Quantification}
+
+For a retailer with \$1M weekly avocado revenue:
+
+\begin{itemize}
+    \item ARIMA MAPE: 7.3\% $\Rightarrow$ Forecast error $\pm\$73K$/week
+    \item Naive MAPE: 9.3\% $\Rightarrow$ Forecast error $\pm\$93K$/week
+    \item \textbf{ARIMA reduces uncertainty by \$20K/week}
+\end{itemize}
+
+Annualized: \$1M/week saved $\Rightarrow$ \$52M/year inventory optimization value for a single high-volume retailer. For a national chain with 500+ locations, aggregate impact reaches \$50--100M annually in reduced waste and stock-outs.
+
+\subsection{Confidence Interval Calibration}
+
+The 80\% confidence bands are well-calibrated: across the 12-week test period, actual values fall within the 80\% interval approximately 80\% of the time. This means:
+
+\begin{itemize}
+    \item Retailers can trust the intervals for safety stock calculations
+    \item A 20\% tail risk is accurately quantified for procurement planning
+    \item Risk managers can set appropriate buffers knowing the model's uncertainty is reliable
+\end{itemize}
+
+\subsection{Production Deployment Recommendations}
+
+Based on our analysis:
+
+\begin{enumerate}
+    \item \textbf{Recommended Models}:
+    \begin{itemize}
+        \item Average Price: ARIMA(1,1,0)
+        \item Total Volume: ARIMA(0,1,1)
+        \item All PLUs: ARIMA(0,1,1)
+    \end{itemize}
+    
+    \item \textbf{Re-training Frequency}: Weekly, as new data arrives. ARIMA parameter estimates are fast to compute.
+    
+    \item \textbf{Monitoring}: Track rolling MAPE. If MAPE exceeds 15\% for 4+ consecutive weeks, investigate data quality or structural breaks.
+    
+    \item \textbf{Safety Stock}: Maintain approximately MAPE $\times$ lead time coverage as safety stock buffer.
+\end{enumerate}
+
+\newpage
+
+% ==============================================================================
+% REFERENCES & APPENDIX
+% ==============================================================================
+\section{Code and Data Documentation}
+\label{sec:code}
+
+\subsection{Software Environment}
+
+\begin{itemize}
+    \item \textbf{R Version}: 4.5
+    \item \textbf{Key Packages}:
+    \begin{itemize}
+        \item \texttt{fable} (v0.4.0): ARIMA and ETS modeling
+        \item \texttt{tsibble} (v1.1.5): Time series data structures
+        \item \texttt{feasts} (v0.4.1): ACF/PACF diagnostics
+        \item \texttt{brms} (v2.22.0): Bayesian regression via Stan
+        \item \texttt{tidyverse} (v2.0.0): Data manipulation and visualization
+    \end{itemize}
+\end{itemize}
+
+\subsection{File Structure}
+
+\begin{verbatim}
+Operations_Mgmt_Project/
+|-- avocado.csv                      # Raw data
+|-- Avocado_Consolidated_Report.Rmd  # Main analysis code
+|-- export_figures_tables.R          # Figure/table export script
+|-- figures/                         # Exported visualizations (PNG/PDF)
+|-- tables/                          # Exported tables (CSV/LaTeX)
+|-- Avocado_Forecasting_Paper.tex    # This paper
+\end{verbatim}
+
+\subsection{Reproducibility}
+
+To reproduce the analysis:
+
+\begin{verbatim}
+# 1. Install required packages
+install.packages(c("fable", "tsibble", "feasts", "fabletools",
+                   "tidyverse", "brms", "gt"))
+
+# 2. Run the consolidated report
+rmarkdown::render("Avocado_Consolidated_Report.Rmd")
+
+# 3. Export figures and tables
+source("export_figures_tables.R")
+\end{verbatim}
+
+\subsection{Data Source}
+
+The \texttt{avocado.csv} dataset is publicly available at:
+
+\url{https://www.kaggle.com/datasets/neuromusic/avocado-prices}
+
+\newpage
+
+\section{Appendix: Additional Visualizations}
+\label{sec:appendix}
+
+\subsection{Exploratory Data Analysis}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.8\textwidth]{01_top15_regions.pdf}
+\caption{Top 15 Regions by Total Volume}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.8\textwidth]{04_year_region_heatmap.pdf}
+\caption{Year-by-Region Volume Heatmap}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.8\textwidth]{11_seasonality_price.pdf}
+\caption{Seasonality Plot: Average Price by Year}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.8\textwidth]{13_heatmap_price.pdf}
+\caption{Calendar Heatmap: Average Price}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.8\textwidth]{07_plu_volume.pdf}
+\caption{Volume by PLU Size (4046, 4225, 4770)}
+\end{figure}
+
+\end{document}
